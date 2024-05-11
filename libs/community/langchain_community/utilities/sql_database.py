@@ -53,6 +53,7 @@ class SQLDatabase:
         metadata: Optional[MetaData] = None,
         ignore_tables: Optional[List[str]] = None,
         include_tables: Optional[List[str]] = None,
+        include_columns: Optional[dict[str,List[str]] = None,
         sample_rows_in_table_info: int = 3,
         indexes_in_table_info: bool = False,
         custom_table_info: Optional[dict] = None,
@@ -82,6 +83,7 @@ class SQLDatabase:
                 raise ValueError(
                     f"include_tables {missing_tables} not found in database"
                 )
+        self.include_columns = include_columns
         self._ignore_tables = set(ignore_tables) if ignore_tables else set()
         if self._ignore_tables:
             missing_tables = self._ignore_tables - self._all_tables
@@ -333,11 +335,15 @@ class SQLDatabase:
                 tables.append(self._custom_table_info[table.name])
                 continue
 
-            # Ignore JSON datatyped columns
+            # Ignore JSON datatyped columns and remove all unwanted columns
             for k, v in table.columns.items():
                 if type(v.type) is NullType:
                     table._columns.remove(v)
-
+                if not self.include_columns is None and table.name in self.include_columns.keys():
+                    if not v.primary_key:
+                        if not v.name in self.include_columns[table.name]:
+                            table._columns.remove(v)
+                            
             # add create table command
             create_table = str(CreateTable(table).compile(self._engine))
             table_info = f"{create_table.rstrip()}"
